@@ -120,10 +120,11 @@ func (d *CouchbaseDatasource) QueryData(ctx context.Context, req *backend.QueryD
 }
 
 type QueryRequest struct {
-	Query     string `json:"query"`
-	Analytics bool   `json:"analytics"`
-	Key       string `json:"key"`
-	Range     backend.TimeRange
+	Query      string `json:"query"`
+	Analytics  bool   `json:"analytics"`
+	IgnoreDate bool   `json:"daterange"`
+	Key        string `json:"key"`
+	Range      backend.TimeRange
 }
 
 type cbResult interface {
@@ -171,8 +172,13 @@ func (d *CouchbaseDatasource) query(channel *string, query_data *QueryRequest) b
 				return response
 			}
 			timeField = &match[strTimeRg.SubexpIndex("field")]
-			query_string = strTimeRg.ReplaceAllString(query_string, fmt.Sprintf("STR_TO_MILLIS($1) > STR_TO_MILLIS('%s') AND STR_TO_MILLIS($1) <= STR_TO_MILLIS('%s')", tr.From.Format(time.RFC3339), tr.To.Format(time.RFC3339)))
-			query_string = "SELECT * FROM (" + query_string + ") AS data ORDER by str_to_millis(data." + *timeField + ") ASC"
+			switch query_data.IgnoreDate {
+			case true:
+				query_string = "SELECT * FROM (" + query_string + ") AS data"
+			case false:
+				query_string = strTimeRg.ReplaceAllString(query_string, fmt.Sprintf("STR_TO_MILLIS($1) > STR_TO_MILLIS('%s') AND STR_TO_MILLIS($1) <= STR_TO_MILLIS('%s')", tr.From.Format(time.RFC3339), tr.To.Format(time.RFC3339)))
+				query_string = "SELECT * FROM (" + query_string + ") AS data ORDER by data." + *timeField + " ASC"
+			}
 		}
 	}
 
@@ -185,12 +191,17 @@ func (d *CouchbaseDatasource) query(channel *string, query_data *QueryRequest) b
 				return response
 			}
 			timeField = &match[timeRg.SubexpIndex("field")]
-			query_string = timeRg.ReplaceAllString(query_string, fmt.Sprintf("$1 > STR_TO_MILLIS('%s') AND $1 <= STR_TO_MILLIS('%s')", tr.From.Format(time.RFC3339), tr.To.Format(time.RFC3339)))
-			query_string = "SELECT * FROM (" + query_string + ") AS data ORDER by data." + *timeField + " ASC"
+			switch query_data.IgnoreDate {
+			case true:
+				query_string = "SELECT * FROM (" + query_string + ") AS data"
+			case false:
+				query_string = timeRg.ReplaceAllString(query_string, fmt.Sprintf("$1 > STR_TO_MILLIS('%s') AND $1 <= STR_TO_MILLIS('%s')", tr.From.Format(time.RFC3339), tr.To.Format(time.RFC3339)))
+				query_string = "SELECT * FROM (" + query_string + ") AS data ORDER by data." + *timeField + " ASC"
+			}
 		}
 	}
 
-	if timeField == nil {
+	if timeField == nil && !query_data.IgnoreDate {
 		response.Error = errors.New("Failed to detect time field. Pleae use time_range(fieldName) or str_time_range(fieldName) functions in WHERE clause of your query.")
 		return response
 	}
@@ -239,7 +250,7 @@ func (d *CouchbaseDatasource) query(channel *string, query_data *QueryRequest) b
 			for i, key := range keys {
 				val := d[key]
 				vals[i] = append(vals[i], val)
-				if key == *timeField {
+				if !query_data.IgnoreDate && key == *timeField {
 					if to, e := time.Parse(time.RFC3339, val.(string)); e == nil {
 						query_data.Range.To = to
 					}

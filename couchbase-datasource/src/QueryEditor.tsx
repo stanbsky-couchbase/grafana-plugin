@@ -22,6 +22,13 @@ export class QueryEditor extends PureComponent<Props> {
     });
   };
 
+  onDateRangeChange = (e: FormEvent<HTMLInputElement>) => {
+    this.props.onChange({
+      ...this.props.query,
+      daterange: e.currentTarget.checked,
+    });
+  };
+
   render() {
     const query = defaults(this.props.query, defaultQuery);
 
@@ -37,6 +44,13 @@ export class QueryEditor extends PureComponent<Props> {
             defaultChecked={query.analytics}
             value={query.analytics}
             onChange={this.onAnalyticsChange}
+          />
+          <InlineSwitch
+              label="Ignore date range"
+              showLabel={true}
+              defaultChecked={query.daterange}
+              value={query.daterange}
+              onChange={this.onDateRangeChange}
           />
         </div>
       </FieldSet>

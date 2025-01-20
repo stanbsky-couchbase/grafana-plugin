@@ -3,11 +3,13 @@ import { DataQuery, DataSourceJsonData } from '@grafana/data';
 export interface CouchbaseQuery extends DataQuery {
   query: string;
   analytics: boolean;
+  daterange: boolean;
 }
 
 export const defaultQuery: Partial<CouchbaseQuery> = {
   query: '',
   analytics: false,
+  daterange: false,
 };
 
 export interface SelectField {
